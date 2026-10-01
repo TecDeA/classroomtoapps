@@ -29,12 +29,16 @@ self.addEventListener('install', (event) => {
 });
 
 // Activación: limpiar cachés antiguas
+// Solo borrar cachés de esta propia app (por prefijo): no tocar las cachés
+// del portal ni las de otras apps alojadas en subcarpetas del mismo dominio.
+const esCachePropia = (c) => c.startsWith('classroom-dm-');
+
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames
-                    .filter((name) => name !== CACHE_NAME)
+                    .filter((name) => name !== CACHE_NAME && esCachePropia(name))
                     .map((name) => caches.delete(name))
             );
         }).then(() => {
