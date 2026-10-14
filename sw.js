@@ -1,5 +1,16 @@
 const CACHE_NAME = 'classroom-dm-v2.4';
 
+// Versión de la aplicación indicada por el Service Worker.
+// Se deriva del nombre de la caché para mantener una única fuente de verdad:
+// al actualizar CACHE_NAME (p. ej. a 'classroom-dm-v2.4'), el chip del banner
+// mostrará automáticamente la nueva versión, sin tocar el index.html.
+// Normalización: tanto 'classroom-dm-v2.4' como 'classroom-dm-2.4' producen
+// la versión '2.4'; la 'v' del chip la añade la propia página.
+const PREFIJO_CACHE = 'classroom-dm-';
+const APP_VERSION = CACHE_NAME.startsWith(PREFIJO_CACHE)
+    ? CACHE_NAME.slice(PREFIJO_CACHE.length).replace(/^v/, '')
+    : CACHE_NAME.replace(/^v/, '');
+
 // Recursos locales y CDN a cachear para uso offline
 const PRECACHE_URLS = [
     './',
@@ -81,4 +92,13 @@ self.addEventListener('fetch', (event) => {
                 });
             })
     );
+});
+
+// Mensajes desde la página: devolver la versión de la app al chip del banner.
+// La página envía { type: 'GET_VERSION' } con un MessageChannel y el SW
+// responde { version: APP_VERSION } a través del puerto proporcionado.
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'GET_VERSION' && event.ports && event.ports[0]) {
+        event.ports[0].postMessage({ type: 'VERSION', version: APP_VERSION });
+    }
 });
