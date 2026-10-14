@@ -81,6 +81,42 @@
             font-size: 2.5rem;
         }
 
+        /* Chip dinámico de versión junto al título del banner.
+           La versión la indica el Service Worker mediante postMessage
+           (véase el bloque de registro del SW al final del body). */
+        .version-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.18);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 999px;
+            color: #fff;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            line-height: 1.2;
+            padding: 5px 14px;
+            white-space: nowrap;
+            cursor: default;
+            user-select: none;
+            -webkit-user-select: none;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+
+        .version-chip:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.65);
+        }
+
+        /* Mientras el atributo [hidden] esté presente, el chip no se muestra
+           (necesario porque display:inline-flex anularía el [hidden] del UA) */
+        .version-chip[hidden] {
+            display: none;
+        }
+
         .header-top {
             display: flex;
             justify-content: space-between;
@@ -912,6 +948,11 @@
                 font-size: 1.7rem;
             }
 
+            .version-chip {
+                font-size: 0.75rem;
+                padding: 4px 10px;
+            }
+
             .header p {
                 font-size: 0.95rem;
             }
@@ -1099,10 +1140,18 @@
 
             .header h1 {
                 font-size: 1.25rem;
+                flex-wrap: wrap;
             }
 
             .header h1 i {
                 font-size: 1.4rem;
+            }
+
+            /* En pantallas muy estrechas el chip pasa con naturalidad
+               a una segunda línea junto al título */
+            .version-chip {
+                font-size: 0.7rem;
+                padding: 3px 9px;
             }
 
             .header p {
@@ -1281,7 +1330,7 @@
         <header class="header">
             <div class="header-top">
                 <div class="header-text">
-                    <h1><i class="fas fa-chalkboard-teacher"></i> Classroom Data Manager</h1>
+                    <h1><i class="fas fa-chalkboard-teacher"></i> Classroom Data Manager <span class="version-chip" id="versionChip" hidden aria-live="polite"></span></h1>
                     <p>Carga, visualiza y exporta datos de Google Classroom. <br>Analiza rúbricas, calificaciones y actividad del curso.</p>
                 </div>
                 <button class="help-btn" id="helpBtn" title="Ayuda">
@@ -3637,6 +3686,60 @@
                         console.warn('Error al registrar el Service Worker:', error);
                     });
             });
+
+            // ─── Chip dinámico de versión junto al título del banner ───
+            // La versión la indica el Service Worker: la página se la solicita
+            // por postMessage (GET_VERSION) y el SW responde con la versión
+            // derivada de su nombre de caché ('classroom-dm-X.Y').
+            const versionChip = document.getElementById('versionChip');
+            let chipTimeout = null;
+
+            function ocultarChipVersion() {
+                clearTimeout(chipTimeout);
+                if (!versionChip) return;
+                versionChip.hidden = true;
+                versionChip.textContent = '';
+                versionChip.removeAttribute('title');
+            }
+
+            function actualizarChipVersion() {
+                if (!versionChip) return;
+
+                // Estado inicial: spinner mientras se consulta al Service Worker
+                clearTimeout(chipTimeout);
+                versionChip.hidden = false;
+                versionChip.removeAttribute('title');
+                versionChip.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i>';
+                // Si el SW no responde (contexto inseguro, registro fallido...), ocultar el chip
+                chipTimeout = setTimeout(ocultarChipVersion, 6000);
+
+                navigator.serviceWorker.ready.then((registration) => {
+                    const worker = registration.active || navigator.serviceWorker.controller;
+                    if (!worker) throw new Error('No hay Service Worker activo');
+
+                    return new Promise((resolve, reject) => {
+                        const canal = new MessageChannel();
+                        canal.port1.onmessage = (event) => {
+                            if (event.data && event.data.version) {
+                                resolve(event.data.version);
+                            } else {
+                                reject(new Error('Respuesta de versión inválida'));
+                            }
+                        };
+                        worker.postMessage({ type: 'GET_VERSION' }, [canal.port2]);
+                    });
+                }).then((version) => {
+                    clearTimeout(chipTimeout);
+                    versionChip.textContent = 'v' + version;
+                    versionChip.title = 'Versión ' + version + ' · indicada por el Service Worker';
+                }).catch(ocultarChipVersion);
+            }
+
+            // Reconsultar la versión cuando un nuevo Service Worker tome el
+            // control (p. ej. tras desplegar una actualización de la app)
+            navigator.serviceWorker.addEventListener('controllerchange', actualizarChipVersion);
+
+            actualizarChipVersion();
         }
     </script>
 </body>
